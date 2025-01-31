@@ -1,0 +1,257 @@
+Face id uchun kod
+<!doctype html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable">
+
+<head>
+
+    <meta charset="utf-8" />
+    <title>{{$user->name}}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+    <!-- App favicon -->
+    <style>
+        #carusel_video {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+
+        }
+
+        .visibility_div {
+            visibility: hidden;
+        }
+    </style>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+</head>
+
+<body>
+    <div id="carusel_video">
+        <div class="spinner-grow text-red" role="status">
+            <span class="sr-only" >Kuting...</span>
+        </div>
+        <br>
+        <div style="transform: translate(-50%, -50%);">Yuz tanish moduli ishga tushmoqda. Bu bir qancha soniyalar talab qiladi(Kompyuteringiz qanchalik kuchli bo'lsa shuncha tez ishlaydi). Iltimos sabr qiling</div>
+    </div>
+    <!-- auth-page wrapper -->
+    <div id="body_main_div" class="auth-page-wrapper auth-bg-cover py-5 d-flex justify-content-center align-items-center min-vh-100 visibility_div flex-column row gap-3">
+        <div class="col-4 d-flex justify-content-center">
+            @if($user->image && $user->image != 0)
+                <img style="width: 200px;" src="{{ env('APP_URL') }}/images/{{ $user->image }}" alt="User Image" />
+            @else
+                <img style="width: 200px;" src="faceid/ss.jpg" alt="Default Image" />
+            @endif
+    </div>
+    <div class="col-4 d-flex justify-content-center">
+        <video id="videoInput" width="720" height="550" muted autoplay>
+    </div>
+    </div>
+    <!-- end auth-page-wrapper -->
+
+    <!-- face id -->
+    <script src="{{ env('APP_URL') }}/faceid/face-api.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+    <script >
+        const video = document.getElementById('videoInput')
+
+        Promise.all([
+                faceapi.nets.faceRecognitionNet.loadFromUri('{{ asset("faceid/models") }}'),
+                faceapi.nets.faceLandmark68Net.loadFromUri('{{ asset("faceid/models") }}'),
+                faceapi.nets.ssdMobilenetv1.loadFromUri('{{ asset("faceid/models") }}')
+            ]).then(start);
+
+        function start() {
+            //document.body.append('Models Loaded')
+
+            navigator.getUserMedia(
+                { video: {} },
+                (stream) => {
+                    video.srcObject = stream;
+                    video.addEventListener('loadedmetadata', function() {
+                        recognizeFaces();
+                    });
+                },
+                (err) => {
+                    alert("Please allow camera access for the site and click OK.");
+                    location.reload();
+                }
+            );
+
+            //video.src = '../videos/speech.mp4'
+            //console.log('video added')
+            // recognizeFaces()
+        }
+        let check = 0;
+        let results_all = [];
+        async function recognizeFaces() {
+
+            const labeledDescriptors = await loadLabeledImages()
+            //console.log(labeledDescriptors)
+            const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.7)
+            await ishla();
+async function ishla() {
+                $('#carusel_video').html('');
+                $('#body_main_div').removeClass('visibility_div');
+                //console.log('Playing')
+                const canvas = faceapi.createCanvasFromMedia(video)
+
+                //document.body.append(canvas)
+                const displaySize = { width: video.width, height: video.height }
+                faceapi.matchDimensions(canvas, displaySize)
+
+
+
+                setInterval(async () => {
+                    const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors()
+
+                    const resizedDetections = faceapi.resizeResults(detections, displaySize)
+
+                    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height)
+
+                    const results = resizedDetections.map((d) => {
+                        return faceMatcher.findBestMatch(d.descriptor)
+                    })
+                    results.forEach( (result, i) => {
+                        console.log(result.toString());
+                        results_all.push(result.toString());
+                        if (results_all.length % 20 == 0) {
+                            check++;
+                            $.ajax({
+                                url: "/face_id_result",
+                                type: "post",
+                                headers: {
+                                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                                },
+                                data: {
+                                    data: results_all,
+                                    email: '{{ $user->email }}',
+                                },
+                                success: function(data) {
+                                    console.log(data)
+                                    results_all = [];
+                                    if (data.ok == true) {
+                                        if (data.pass == false) {
+                                            if (check > 3) {
+                                                alert('Barcha urunishlar yakunlandi');
+                                                window.location = "/login"
+                                            } else {
+                                                alert(data.text);
+                                            }
+                                        } else {
+                                            console.log(data);
+                                            alert("Yuz tekshiruvidan muvaffaqiyati o'tdingiz.");
+                                            window.location = "/home"
+                                        }
+                                    } else {
+                                        alert('Modullar ishlashida xatolik');
+                                        // window.location = "/login"
+                                    }
+                                }
+                            });
+                        }
+                    })
+                }, 100)
+            }
+        }
+
+
+        function loadLabeledImages() {
+            const labels = ['{{ $user->name }}'] // for WebCam
+            return Promise.all(
+                labels.map(async (label)=>{
+                    const descriptions = []
+                    for(let i=1; i<=1; i++) {
+                        const img = await faceapi.fetchImage({{ $user->image && $user->image != 0 ? env('APP_URL') . '/images/' . $user->image : 'faceid/ss.jpg' }});
+                        const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                        descriptions.push(detections.descriptor)
+
+                    }
+                    //document.body.append(label+' Faces Loaded | ')
+                    return new faceapi.LabeledFaceDescriptors(label, descriptions)
+                })
+            )
+        }
+    </script>
+</body>
+
+</html>
+
+
+Route::post('/face_id_result', 'MemberController@face_id_result');
+Route::post('/kirish', 'MemberController@kirish')->name('kirish');
+
+
+public function kirish(Request $request)
+    {
+        // dd($request);
+        $user = User::where("email", $request->email)->first();
+        if (!empty($user)) {
+            if ($user->admin == 1) {
+                $credentials = [ "email" => $request->email, "password" => $request->password ];
+                if (Auth::attempt($credentials)) {
+                    return redirect('/');
+                } else {
+                    return back()->withError();
+                }
+            } else {
+                $request->session()->put('email', $request->email);
+                $request->session()->put('password', $request->password);
+                return view("auth.face")->with(['user' => $user]);
+            }
+        }
+    }
+
+    public function face_id_result(Request $request)
+    {
+        $correct = 0;
+        $wrong = 0;
+        if (isset($request->data)) {
+            if (count($request->data) == 20 && $request->session()->has('email')) {
+                $user = User::where('email', $request->session()->get('email'))->first();
+                if (!empty($user)) {
+                    foreach ($request->data as $data) {
+                        if (preg_match("/(.*)? \((.*)?\)/i", $data, $match)) {
+                            if ($request->email == $user->email && floatval($match[2]) < 0.5) {
+                                $correct++;
+                            } else {
+                                $wrong++;
+                            }
+                        }
+                    }
+                    $pass = false;
+                    $text = "Yuz orqali tanish jarayonidan o'ta olmadingiz. Yuzingiz yetarli darajada yorug'lik tushganligiga e'tibor bering va kameraga to'g'ri qarab turing.";
+                    if ($correct > 3) {
+                        $credentials = [ "email" => $user->email, "password" => $request->session()->get('password')];
+                        $request->session()->forget('email');
+                        $request->session()->forget('password');
+                        $request->session()->regenerate();
+                        $pass = true;
+                        $text = "Muvaffaqiyatli";
+                        if (!auth()->check()) {
+                            if (Auth::attempt($credentials)) {
+                                return response()->json([ "ok" => false, 'data' => $credentials ], 200);
+                            }
+                        }
+                        return response()->json(
+                            [
+                                "ok" => true,
+                                "pass" => $pass,
+                                'text' => $text ],
+                            200);
+                    } else {
+                        return response()->json(
+                            [
+                                "ok" => true,
+                                "pass" => $pass,
+                                'text' => $text ],
+                            200);
+                    }
+                }
+            }
+        }
+        return response()->json([ "ok" => false ], 200);
+    }
